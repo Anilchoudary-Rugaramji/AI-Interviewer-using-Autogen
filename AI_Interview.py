@@ -1,9 +1,11 @@
 from autogen_agentchat.agents import AssistantAgent, UserProxyAgent
 from autogen_ext.models.openai import OpenAIChatCompletionClient
-from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_agentchat.conditions import TextMentionTermination
 from dotenv import load_dotenv
+from autogen_agentchat.teams import RoundRobinGroupChat
+from autogen_agentchat.ui import Console
 import os
+import asyncio
 
 load_dotenv()
 
@@ -19,15 +21,16 @@ model_client = OpenAIChatCompletionClient(model="gpt-4o",
 # 2. candidate Agent
 # 3. Career coach Agent
 
-job_position = "Softare Engineer"
+job_position = "Software Engineer"
 
 interviewer_agent = AssistantAgent(
     name="interviewer",
     model_client=model_client,
-    system_message=f"""You are an professional interviwerfor a {job_position} position. 
+    system_message=f"""You are a professional interviewer for a {job_position} position. 
     Ask one clear question at a time. And wait for user to respond. 
     Ask five questions in total covering technical skills and experience, problem solving
     abilities and cultural fit. 
+    You job is to ask question. and dont focus on response from career coach.
     After asking 5 questions, say "TERMINATE" at the end of the interview.
     """
 )
@@ -38,15 +41,29 @@ candidate_agent = UserProxyAgent(
 )
 
 career_coach = AssistantAgent(
-    name="career coach",
+    name="career_coach",
     model_client=model_client,
-    description="""An AI agent the provides feedback and advice to candidates for a 
+    description=f"""An AI agent that provides feedback and advice to candidates for a 
     {job_position} position""",
-    system_message="""You are an career coach specilising in preparing the candidates
-      for the  {job_position} position interviews. Provide constructive feddback on 
-      candidates  responses  and suggest improvements. After the interview.
-      After the interview summarize candidates performance and provide actionable advice.
+    system_message=f"""You are a career coach specializing in preparing candidates
+      for {job_position} position interviews. Provide constructive feedback on 
+      candidates' responses and suggest improvements. After the interview,
+      summarize the candidate's performance and provide actionable advice.
     """
 )
 
-+
+team = RoundRobinGroupChat(
+    participants=[interviewer_agent, candidate_agent, career_coach],
+    max_turns=20,
+    termination_condition=TextMentionTermination(text="TERMINATE")
+)
+
+async def main():
+    stream = team.run_stream(task="""Conduct an interview for a Software Engineer position.
+    Conduct the interview in a professional and friendly manner.
+    """)
+    
+    await Console(stream)
+
+if __name__ == "__main__":
+    asyncio.run(main())
